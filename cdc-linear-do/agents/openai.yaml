@@ -1,0 +1,4 @@
+interface:
+  display_name: "CDC Linear Do"
+  short_description: "Execute a Linear task end to end"
+  default_prompt: "Use $cdc-linear-do to complete ENG-22195 end to end."
