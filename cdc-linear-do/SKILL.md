@@ -1,6 +1,6 @@
 ---
 name: cdc-linear-do
-description: Execute a Linear issue end to end from an issue key such as ENG-22195. Use when the user invokes $cdc-linear-do, asks to do or complete a Linear task by ID, or wants Codex to work from main in a Git worktree, keep Linear updated, file follow-up Linear issues, verify the fix or task, self-review, commit, merge into main, and push origin main.
+description: Execute a Linear issue end to end from an issue key such as ENG-22195. Use when the user invokes $cdc-linear-do, asks to do or complete a Linear task by ID, or wants the agent to work from main in a Git worktree, keep Linear updated, file follow-up Linear issues, verify the fix or task, self-review, commit, merge into main, and push origin main.
 ---
 
 # CDC Linear Do
@@ -34,6 +34,7 @@ git worktree add -b eng-22195 ../<repo>-eng-22195 origin/main
 ```
 
 - If the repository has no `origin/main`, fall back to local `main` and note that in Linear.
+- If a worktree or branch for this key already exists from an earlier run, reuse it or use a uniquely suffixed name instead of failing.
 - Work only inside the task worktree until the merge step.
 
 ### 3. Implement The Issue
@@ -57,20 +58,42 @@ git worktree add -b eng-22195 ../<repo>-eng-22195 origin/main
 - Fix issues found during self-review, then rerun the relevant verification.
 - Post a Linear update summarizing verification and any remaining risk.
 
-### 6. Commit, Merge, And Push Main
+### 6. Commit And Push To Main
 
 - Ensure all intended changes are committed. Use a clear commit message that includes the Linear key, such as `ENG-22195: fix checkout retry handling`.
-- Re-fetch latest main before integration.
-- Prefer a fast-forward-safe integration:
-  - Rebase or merge the task branch onto the latest `origin/main`.
-  - Re-run targeted verification if the integration changed the code.
-  - Push only when the task branch contains the latest `origin/main` as an ancestor.
-- Merge into local `main` and push `origin main` when the local checkout is clean and available.
-- If local `main` cannot be safely checked out because of unrelated user work, push the verified task branch to `origin main` only when it is a fast-forward of latest `origin/main`, then explain that integration path in Linear and the final response.
+- Re-fetch latest main before integration: `git fetch origin main`.
+- Rebase the task branch onto the latest `origin/main` so the branch contains it as an ancestor:
+
+```bash
+git rebase origin/main
+```
+
+- Re-run targeted verification if the rebase changed the code.
+- Push the verified branch straight to main as a fast-forward, without checking out local `main`:
+
+```bash
+git push origin HEAD:main      # fast-forwards origin/main; fails safely if it moved, never force
+```
+
+- Optionally bring the local `main` ref up to date afterward (best effort; skip if `main` is checked out in another worktree):
+
+```bash
+git fetch origin main:main
+```
+
+- If the push is rejected because `origin/main` advanced, re-fetch, rebase again, re-verify, and retry. Never use `--force` against main.
 - If branch protection, authentication, CI policy, or permissions reject the push, stop and report the exact blocker. Do not bypass protections.
 
 ### 7. Close Out
 
 - Update Linear with the final commit hash, whether `origin/main` was pushed, verification commands and results, and any follow-up issues filed.
 - Move the Linear issue to the appropriate completed state only when the team's Linear workflow is clear. Otherwise, leave a final comment and let existing automation or humans transition it.
+- Clean up after yourself once the push has succeeded: remove the task worktree and delete the now-merged local branch so no scratch directories or stale branches are left behind:
+
+```bash
+git worktree remove ../<repo>-eng-22195
+git branch -d eng-22195
+```
+
+- Do not remove the worktree if the push failed or work is incomplete; leave it in place so the run can be resumed.
 - Final response must include the Linear issue key, worktree path, branch, commit hash, pushed status, verification run, and any follow-up Linear issue IDs.
